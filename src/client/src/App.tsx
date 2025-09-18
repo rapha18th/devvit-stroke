@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { API_BASE, startToday, callToolSignature } from "./api";
+import { API_BASE, startToday, callToolSignature, health } from "./api";
 
 type CasePublic = {
   case_id: string;
@@ -22,14 +22,25 @@ export default function App() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
 
-  function push(msg: string) {
-    console.log("[UI]", msg);
-    setLogs(prev => [...prev, msg].slice(-200));
-  }
+  function push(msg: string) { console.log("[UI]", msg); setLogs(p => [...p, msg].slice(-500)); }
 
   useEffect(() => {
     (async () => {
+      push("[Boot] DOMContentLoaded");
+      push("[Boot] mounting app…");
+      setTimeout(() => push("[Boot] render requested"), 0);
+
       push(`Booting Hidden Stroke… API base: ${API_BASE}`);
+
+      // ---- Health probe (GET) ----
+      try {
+        const h = await health();
+        push(`[Health] ok: ${JSON.stringify(h)}`);
+      } catch (e: any) {
+        push(`[Health] FAILED: ${e?.message || e}`);
+      }
+
+      // ---- Start today ----
       try {
         const user = detectUser();
         push(`User: ${JSON.stringify(user)}`);
@@ -47,18 +58,11 @@ export default function App() {
     })();
   }, []);
 
-  // ✅ FIX: no assignments inside expressions; do it step-by-step
   function detectUser() {
     const g = globalThis as any;
-    if (!g.__hs_uid) {
-      g.__hs_uid = "anon-" + Math.random().toString(36).slice(2);
-    }
-    if (!g.__hs_uname) {
-      g.__hs_uname = "anon";
-    }
-    const id = g.__hs_uid as string;
-    const name = g.__hs_uname as string;
-    return { id, name };
+    if (!g.__hs_uid) g.__hs_uid = "anon-" + Math.random().toString(36).slice(2);
+    if (!g.__hs_uname) g.__hs_uname = "anon";
+    return { id: g.__hs_uid as string, name: g.__hs_uname as string };
   }
 
   if (status === "boot") {
@@ -77,13 +81,12 @@ export default function App() {
         <h1>Hidden Stroke</h1>
         <p style={{color:"#ff6b6b"}}>Could not load today’s case. Load failed</p>
         <p>API base: <code>{API_BASE}</code></p>
-        <pre className="err">{error}</pre>
+        <pre className="err">{error || "Load failed"}</pre>
         <SmallLog logs={logs} />
       </div>
     );
   }
 
-  // ready
   const c = caseData!;
   return (
     <div className="wrap">
@@ -117,7 +120,7 @@ export default function App() {
 
 function SmallLog({ logs }: { logs: string[] }) {
   return (
-    <details style={{marginTop:16}}>
+    <details style={{marginTop:16}} open>
       <summary>Client logs</summary>
       <pre className="log">{logs.join("\n")}</pre>
     </details>
