@@ -1,5 +1,5 @@
 import express from 'express';
-import { reddit, createServer, context, getServerPort, Devvit } from '@devvit/web/server';
+import { reddit, createServer, context, getServerPort } from '@devvit/web/server';
 import { createPost } from './core/post';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 
@@ -90,18 +90,24 @@ async function forwardRequest(req, res, path, options = {}) {
     const userId = user?.id ?? `anon-${Date.now()}`;
     const userName = user?.name ?? 'anonymous';
 
-    // Use Devvit's HTTP service directly
-    const response = await Devvit.http.fetch(url, {
+    // Create request options
+    const requestOptions = {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
+        'User-Agent': 'DevvitApp/1.0',
         'X-Reddit-Id': userId,
         'X-Reddit-User': userName,
         // Forward the session ID header if the client sent it.
         ...(req.headers['x-session-id'] && { 'X-Session-Id': req.headers['x-session-id'] }),
       },
       ...options,
-    });
+    };
+
+    console.log(`[PROXY] Making request to: ${url}`, requestOptions);
+
+    // Try using the global fetch if available in the Devvit environment
+    const response = await globalThis.fetch(url, requestOptions);
 
     const responseData = await response.json();
 
@@ -111,6 +117,7 @@ async function forwardRequest(req, res, path, options = {}) {
       return res.status(response.status).json(responseData);
     }
 
+    console.log(`[PROXY] Success: ${response.status}`, responseData);
     // Send the successful response back to the client.
     res.status(response.status).json(responseData);
   } catch (error) {
