@@ -15,37 +15,29 @@
   },
 
   "webview": {
-    "csp": {
-      "default-src": ["'self'"],
-      "script-src": ["'self'"],
-      "style-src": ["'self'", "'unsafe-inline'"],
-      "img-src": [
-        "'self'",
-        "data:",
-        "blob:",
-        "https://*.redd.it",
-        "https://i.redd.it",
-        "https://i.imgur.com",
-        "https://archive.org",
-        "https://storage.googleapis.com",
-        "https://*.googleapis.com",
-        "https://*.googleusercontent.com",
-        "https://rairo-dev-stroke.hf.space",
-        "https://*.hf.space"
-      ],
-      "media-src": [
-        "https://storage.googleapis.com",
-        "data:",
-        "blob:"
-      ],
-      "connect-src": [
-        "'self'",
-        "https://rairo-dev-stroke.hf.space",
-        "https://*.hf.space",
-        "https://archive.org",
-        "https://storage.googleapis.com",
-        "https://*.googleapis.com"
-      ]
+    "content": {
+      "csp": {
+        "default-src": ["'self'"],
+        "img-src": [
+          "'self'",
+          "data:",
+          "https://*.redd.it",
+          "https://i.redd.it",
+          "https://i.imgur.com",
+          "https://archive.org",
+          "https://storage.googleapis.com",
+          "https://*.googleapis.com",
+          "https://*.googleusercontent.com",
+          "https://*.hf.space",
+          "https://rairo-dev-stroke.hf.space"
+        ],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "script-src": ["'self'"],
+        "connect-src": [
+          "'self'",
+          "https://*"
+        ]
+      }
     }
   },
 
