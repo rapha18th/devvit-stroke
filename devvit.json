@@ -14,6 +14,12 @@
     "entry": "index.cjs"
   },
 
+  "http": {
+    "domains": [
+      "rairo-dev-stroke.hf.space"
+    ]
+  },
+
   "webview": {
     "content": {
       "csp": {
@@ -28,20 +34,12 @@
           "https://storage.googleapis.com",
           "https://*.googleapis.com",
           "https://*.googleusercontent.com",
-          "https://*.hf.space",
           "https://rairo-dev-stroke.hf.space"
         ],
         "style-src": ["'self'", "'unsafe-inline'"],
         "script-src": ["'self'"],
         "connect-src": [
           "'self'",
-          "https://rairo-dev-stroke.hf.space",
-          "https://*.hf.space",
-          "https://*.huggingface.co",
-          "https://archive.org",
-          "https://storage.googleapis.com",
-          "https://*.googleapis.com",
-          "https://*.googleusercontent.com",
           "https://*.reddit.com",
           "https://*.devvit.net"
         ]
