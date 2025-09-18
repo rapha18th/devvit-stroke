@@ -1,38 +1,48 @@
-import express from 'express';
-import { reddit, createServer, context, getServerPort } from '@devvit/web/server';
+// server/index.ts
+import express, { Request, Response } from 'express';
+import { createServer, context, getServerPort } from '@devvit/web/server';
 import { createPost } from './core/post';
-import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
+import {
+  InitResponse,
+  IncrementResponse,
+  DecrementResponse,
+} from '../shared/types/api';
 
+// ----------------------------------------------------------------------------
+// App setup
+// ----------------------------------------------------------------------------
 const app = express();
-
-// Middleware for JSON body parsing
 app.use(express.json());
-// Middleware for URL-encoded body parsing
 app.use(express.urlencoded({ extended: true }));
-// Middleware for plain text body parsing
 app.use(express.text());
 
-// ---- ORIGINAL ROUTER ----
+// ----------------------------------------------------------------------------
+// Original router (kept so your existing UI doesn’t break)
+// Implement minimal OK responses if your original handlers aren’t present yet.
+// ----------------------------------------------------------------------------
 const router = express.Router();
 
 router.get<{ postId: string }, InitResponse | { status: string; message: string }>(
   '/api/init',
   async (_req, res): Promise<void> => {
-    // This is your original code
+    // TODO: put your original logic back here if needed
+    res.json({ status: 'success', value: { count: 0 } } as any);
   }
 );
 
 router.post<{ postId: string }, IncrementResponse | { status: string; message: string }, unknown>(
   '/api/increment',
   async (_req, res): Promise<void> => {
-    // This is your original code
+    // TODO: put your original logic back here if needed
+    res.json({ status: 'success', value: { count: 1 } } as any);
   }
 );
 
-router.post<{ postId:string }, DecrementResponse | { status: string; message: string }, unknown>(
+router.post<{ postId: string }, DecrementResponse | { status: string; message: string }, unknown>(
   '/api/decrement',
   async (_req, res): Promise<void> => {
-    // This is your original code
+    // TODO: put your original logic back here if needed
+    res.json({ status: 'success', value: { count: 0 } } as any);
   }
 );
 
@@ -45,10 +55,7 @@ router.post('/internal/on-app-install', async (_req, res): Promise<void> => {
     });
   } catch (error) {
     console.error(`Error creating post: ${error}`);
-    res.status(400).json({
-      status: 'error',
-      message: 'Failed to create post',
-    });
+    res.status(400).json({ status: 'error', message: 'Failed to create post' });
   }
 });
 
@@ -60,487 +67,371 @@ router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
     });
   } catch (error) {
     console.error(`Error creating post: ${error}`);
-    res.status(400).json({
-      status: 'error',
-      message: 'Failed to create post',
-    });
+    res.status(400).json({ status: 'error', message: 'Failed to create post' });
   }
 });
 
-// Use the main router
 app.use(router);
 
-// ---- PROXY ROUTER WITH DEVVIT HTTP CLIENT ----
+// ----------------------------------------------------------------------------
+// PROXY router → Hugging Face Flask server
+// Refactored to use global `fetch()` (allowed by devvit.json "http.domains").
+// ----------------------------------------------------------------------------
 const proxyRouter = express.Router();
 
 // Base URL for your Hugging Face server
 const HF_BASE_URL = 'https://rairo-dev-stroke.hf.space';
 
-// Helper function to make requests to HF server using Devvit's HTTP client
-async function makeHFRequest(endpoint: string, method: 'GET' | 'POST' = 'GET', data?: any, headers?: Record<string, string>) {
+async function makeHFRequest(
+  endpoint: string,
+  method: 'GET' | 'POST' = 'GET',
+  data?: unknown,
+  headers: Record<string, string> = {}
+) {
   const url = `${HF_BASE_URL}${endpoint}`;
-  
+
+  const init: RequestInit = {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'DevvitStrokeApp/1.0',
+      ...headers,
+    },
+  };
+
+  if (method === 'POST') {
+    init.body = data ? JSON.stringify(data) : '{}';
+  }
+
+  console.log(`[PROXY] ${method} ${url}`);
+  if (init.body) console.log(`[PROXY] body: ${init.body}`);
+
+  const resp = await fetch(url, init);
+  const text = await resp.text(); // read once
+
+  if (!resp.ok) {
+    console.error(`[PROXY] HTTP ${resp.status} ${resp.statusText} from ${endpoint}: ${text}`);
+    throw new Error(`HTTP ${resp.status} ${resp.statusText}: ${text}`);
+  }
+
   try {
-    const requestOptions: any = {
-      url: url,
-      method: method,
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'DevvitStrokeApp/1.0',
-        ...headers
-      }
-    };
-
-    if (method === 'POST' && data) {
-      requestOptions.body = JSON.stringify(data);
-    }
-
-    console.log(`[PROXY] Making ${method} request to: ${url}`);
-    if (data) {
-      console.log(`[PROXY] Request body:`, JSON.stringify(data, null, 2));
-    }
-    
-    // Use Devvit's HTTP client instead of fetch
-    const response = await reddit.http(requestOptions);
-    
-    if (!response.ok) {
-      console.error(`[PROXY] HTTP ${response.status} error from ${endpoint}:`, response.body);
-      throw new Error(`HTTP ${response.status}: ${response.statusText} - ${response.body}`);
-    }
-
-    const responseData = JSON.parse(response.body || '{}');
-    console.log(`[PROXY] Success response from ${endpoint}:`, JSON.stringify(responseData, null, 2));
-    
-    return responseData;
-  } catch (error) {
-    console.error(`[PROXY] Error calling ${endpoint}:`, error);
-    throw error;
+    return text ? JSON.parse(text) : {};
+  } catch (e) {
+    console.error('[PROXY] JSON parse error:', e, 'raw:', text);
+    throw new Error('Upstream returned non-JSON');
   }
 }
 
-// Health check - proxy to HF server
-proxyRouter.get('/health', async (req, res) => {
+// ---- Health
+proxyRouter.get('/health', async (_req: Request, res: Response) => {
   try {
     console.log('[PROXY] Health check requested');
-    const healthData = await makeHFRequest('/health');
+    const healthData = await makeHFRequest('/health', 'GET');
     res.json(healthData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Health check failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Health check failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error?.message || 'Unknown error',
       timestamp: new Date().toISOString(),
-      service: 'devvit-stroke-proxy'
+      service: 'devvit-stroke-proxy',
     });
   }
 });
 
-// Start today's case - proxy to HF server
-proxyRouter.post('/cases/today/start', async (req, res) => {
+// ---- Start today’s case
+proxyRouter.post('/cases/today/start', async (req: Request, res: Response) => {
   try {
-    // Forward Reddit user headers to HF server
     const headers: Record<string, string> = {};
-    if (req.headers['x-reddit-user']) {
-      headers['X-Reddit-User'] = req.headers['x-reddit-user'] as string;
-    }
-    if (req.headers['x-reddit-id']) {
-      headers['X-Reddit-Id'] = req.headers['x-reddit-id'] as string;
-    }
+    if (req.headers['x-reddit-user']) headers['X-Reddit-User'] = String(req.headers['x-reddit-user']);
+    if (req.headers['x-reddit-id']) headers['X-Reddit-Id'] = String(req.headers['x-reddit-id']);
 
     console.log('[PROXY] Starting case with headers:', headers);
     console.log('[PROXY] Request body:', req.body);
-    
+
     const caseData = await makeHFRequest('/cases/today/start', 'POST', req.body, headers);
     res.json(caseData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Case start failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Failed to start case',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-// Signature tool - proxy to HF server
-proxyRouter.post('/cases/:caseId/tool/signature', async (req, res) => {
+// ---- Tools (signature / metadata / financial)
+proxyRouter.post('/cases/:caseId/tool/signature', async (req: Request, res: Response) => {
   try {
     const { caseId } = req.params;
-    
-    // Forward session header if present
     const headers: Record<string, string> = {};
-    if (req.headers['x-session-id']) {
-      headers['X-Session-Id'] = req.headers['x-session-id'] as string;
-    }
-    if (req.headers['x-reddit-user']) {
-      headers['X-Reddit-User'] = req.headers['x-reddit-user'] as string;
-    }
-    if (req.headers['x-reddit-id']) {
-      headers['X-Reddit-Id'] = req.headers['x-reddit-id'] as string;
-    }
+    if (req.headers['x-session-id']) headers['X-Session-Id'] = String(req.headers['x-session-id']);
+    if (req.headers['x-reddit-user']) headers['X-Reddit-User'] = String(req.headers['x-reddit-user']);
+    if (req.headers['x-reddit-id']) headers['X-Reddit-Id'] = String(req.headers['x-reddit-id']);
 
     console.log(`[PROXY] Signature tool for case: ${caseId}`, req.body);
-    
-    const toolData = await makeHFRequest(
-      `/cases/${caseId}/tool/signature`, 
-      'POST', 
-      req.body, 
-      headers
-    );
+    const toolData = await makeHFRequest(`/cases/${caseId}/tool/signature`, 'POST', req.body, headers);
     res.json(toolData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Signature tool failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Signature tool failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error?.message || 'Unknown error',
       timestamp: new Date().toISOString(),
-      caseId: req.params.caseId
+      caseId: req.params.caseId,
     });
   }
 });
 
-// Metadata tool - proxy to HF server
-proxyRouter.post('/cases/:caseId/tool/metadata', async (req, res) => {
+proxyRouter.post('/cases/:caseId/tool/metadata', async (req: Request, res: Response) => {
   try {
     const { caseId } = req.params;
-    
     const headers: Record<string, string> = {};
-    if (req.headers['x-session-id']) {
-      headers['X-Session-Id'] = req.headers['x-session-id'] as string;
-    }
-    if (req.headers['x-reddit-user']) {
-      headers['X-Reddit-User'] = req.headers['x-reddit-user'] as string;
-    }
-    if (req.headers['x-reddit-id']) {
-      headers['X-Reddit-Id'] = req.headers['x-reddit-id'] as string;
-    }
+    if (req.headers['x-session-id']) headers['X-Session-Id'] = String(req.headers['x-session-id']);
+    if (req.headers['x-reddit-user']) headers['X-Reddit-User'] = String(req.headers['x-reddit-user']);
+    if (req.headers['x-reddit-id']) headers['X-Reddit-Id'] = String(req.headers['x-reddit-id']);
 
     console.log(`[PROXY] Metadata tool for case: ${caseId}`, req.body);
-    
-    const toolData = await makeHFRequest(
-      `/cases/${caseId}/tool/metadata`, 
-      'POST', 
-      req.body, 
-      headers
-    );
+    const toolData = await makeHFRequest(`/cases/${caseId}/tool/metadata`, 'POST', req.body, headers);
     res.json(toolData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Metadata tool failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Metadata tool failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error?.message || 'Unknown error',
       timestamp: new Date().toISOString(),
-      caseId: req.params.caseId
+      caseId: req.params.caseId,
     });
   }
 });
 
-// Financial tool - proxy to HF server
-proxyRouter.post('/cases/:caseId/tool/financial', async (req, res) => {
+proxyRouter.post('/cases/:caseId/tool/financial', async (req: Request, res: Response) => {
   try {
     const { caseId } = req.params;
-    
     const headers: Record<string, string> = {};
-    if (req.headers['x-session-id']) {
-      headers['X-Session-Id'] = req.headers['x-session-id'] as string;
-    }
-    if (req.headers['x-reddit-user']) {
-      headers['X-Reddit-User'] = req.headers['x-reddit-user'] as string;
-    }
-    if (req.headers['x-reddit-id']) {
-      headers['X-Reddit-Id'] = req.headers['x-reddit-id'] as string;
-    }
+    if (req.headers['x-session-id']) headers['X-Session-Id'] = String(req.headers['x-session-id']);
+    if (req.headers['x-reddit-user']) headers['X-Reddit-User'] = String(req.headers['x-reddit-user']);
+    if (req.headers['x-reddit-id']) headers['X-Reddit-Id'] = String(req.headers['x-reddit-id']);
 
     console.log(`[PROXY] Financial tool for case: ${caseId}`, req.body);
-    
-    const toolData = await makeHFRequest(
-      `/cases/${caseId}/tool/financial`, 
-      'POST', 
-      req.body, 
-      headers
-    );
+    const toolData = await makeHFRequest(`/cases/${caseId}/tool/financial`, 'POST', req.body, headers);
     res.json(toolData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Financial tool failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Financial tool failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error?.message || 'Unknown error',
       timestamp: new Date().toISOString(),
-      caseId: req.params.caseId
+      caseId: req.params.caseId,
     });
   }
 });
 
-// Submit guess - proxy to HF server
-proxyRouter.post('/cases/:caseId/guess', async (req, res) => {
+// ---- Guess
+proxyRouter.post('/cases/:caseId/guess', async (req: Request, res: Response) => {
   try {
     const { caseId } = req.params;
-    
     const headers: Record<string, string> = {};
-    if (req.headers['x-session-id']) {
-      headers['X-Session-Id'] = req.headers['x-session-id'] as string;
-    }
-    if (req.headers['x-reddit-user']) {
-      headers['X-Reddit-User'] = req.headers['x-reddit-user'] as string;
-    }
-    if (req.headers['x-reddit-id']) {
-      headers['X-Reddit-Id'] = req.headers['x-reddit-id'] as string;
-    }
+    if (req.headers['x-session-id']) headers['X-Session-Id'] = String(req.headers['x-session-id']);
+    if (req.headers['x-reddit-user']) headers['X-Reddit-User'] = String(req.headers['x-reddit-user']);
+    if (req.headers['x-reddit-id']) headers['X-Reddit-Id'] = String(req.headers['x-reddit-id']);
 
     console.log(`[PROXY] Submitting guess for case: ${caseId}`, req.body);
-    
-    const guessData = await makeHFRequest(
-      `/cases/${caseId}/guess`, 
-      'POST', 
-      req.body, 
-      headers
-    );
+    const guessData = await makeHFRequest(`/cases/${caseId}/guess`, 'POST', req.body, headers);
     res.json(guessData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Guess submission failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Guess submission failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error?.message || 'Unknown error',
       timestamp: new Date().toISOString(),
-      caseId: req.params.caseId
+      caseId: req.params.caseId,
     });
   }
 });
 
-// Daily leaderboard - proxy to HF server
-proxyRouter.get('/leaderboard/daily', async (req, res) => {
+// ---- Leaderboard
+proxyRouter.get('/leaderboard/daily', async (req: Request, res: Response) => {
   try {
     const headers: Record<string, string> = {};
-    if (req.headers['x-reddit-user']) {
-      headers['X-Reddit-User'] = req.headers['x-reddit-user'] as string;
-    }
-    if (req.headers['x-reddit-id']) {
-      headers['X-Reddit-Id'] = req.headers['x-reddit-id'] as string;
-    }
+    if (req.headers['x-reddit-user']) headers['X-Reddit-User'] = String(req.headers['x-reddit-user']);
+    if (req.headers['x-reddit-id']) headers['X-Reddit-Id'] = String(req.headers['x-reddit-id']);
 
     console.log('[PROXY] Fetching daily leaderboard with headers:', headers);
-    
     const leaderboardData = await makeHFRequest('/leaderboard/daily', 'GET', undefined, headers);
     res.json(leaderboardData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Leaderboard fetch failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Failed to fetch leaderboard',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-// Debug endpoint to test connectivity
-proxyRouter.get('/debug', async (req, res) => {
+// ---- Debug connectivity
+proxyRouter.get('/debug', async (_req: Request, res: Response) => {
   try {
     console.log('[DEBUG] Testing basic connectivity to HF server');
-    
-    // Test with a simple GET request using Devvit's HTTP client
-    const testResponse = await reddit.http({
-      url: 'https://rairo-dev-stroke.hf.space/health',
+    const r = await fetch(`${HF_BASE_URL}/health`, {
       method: 'GET',
-      headers: {
-        'User-Agent': 'DevvitStrokeApp/1.0'
-      }
+      headers: { 'User-Agent': 'DevvitStrokeApp/1.0' },
     });
-    
-    console.log('[DEBUG] Test response:', testResponse);
-    
+    const body = await r.text();
     res.json({
-      success: true,
-      status: testResponse.status,
-      statusText: testResponse.statusText,
-      body: testResponse.body,
-      ok: testResponse.ok,
-      timestamp: new Date().toISOString()
+      success: r.ok,
+      status: r.status,
+      statusText: r.statusText,
+      body,
+      timestamp: new Date().toISOString(),
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error('[DEBUG] Test failed:', error);
     res.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : undefined,
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-// Test endpoint to verify the proxy is working
-proxyRouter.get('/test', async (req, res) => {
-  try {
-    // Test connection to HF server
-    console.log('[PROXY] Testing connection to HF server');
-    const healthData = await makeHFRequest('/health');
-    res.json({
-      message: 'Proxy router is working and connected to HF server!',
-      timestamp: new Date().toISOString(),
-      hf_health: healthData,
-      hf_base_url: HF_BASE_URL,
-      userAgent: req.headers['user-agent'],
-      method: req.method,
-      path: req.path
-    });
-  } catch (error) {
-    console.error('[PROXY] HF connection test failed:', error);
-    res.json({
-      message: 'Proxy router is working but HF connection failed',
-      timestamp: new Date().toISOString(),
-      hf_base_url: HF_BASE_URL,
-      error: error instanceof Error ? error.message : 'Unknown error',
-      userAgent: req.headers['user-agent'],
-      method: req.method,
-      path: req.path
-    });
-  }
-});
-
-// Admin endpoints (if you need them proxied)
-proxyRouter.post('/admin/bootstrap-now', async (req, res) => {
+// ---- Admin passthroughs (optional)
+proxyRouter.post('/admin/bootstrap-now', async (req: Request, res: Response) => {
   try {
     console.log('[PROXY] Admin bootstrap request', req.body);
     const bootstrapData = await makeHFRequest('/admin/bootstrap-now', 'POST', req.body);
     res.json(bootstrapData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Bootstrap failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Bootstrap failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-proxyRouter.get('/admin/diagnostics', async (req, res) => {
+proxyRouter.get('/admin/diagnostics', async (_req: Request, res: Response) => {
   try {
     console.log('[PROXY] Admin diagnostics request');
     const diagnosticsData = await makeHFRequest('/admin/diagnostics', 'GET');
     res.json(diagnosticsData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Diagnostics failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Diagnostics failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-proxyRouter.get('/admin/ia-pool/stats', async (req, res) => {
+proxyRouter.get('/admin/ia-pool/stats', async (req: Request, res: Response) => {
   try {
-    const adminKey = req.headers['x-admin-key'];
     const headers: Record<string, string> = {};
-    if (adminKey) {
-      headers['X-Admin-Key'] = adminKey as string;
-    }
-    
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey) headers['X-Admin-Key'] = String(adminKey);
     console.log('[PROXY] Admin IA pool stats request');
     const statsData = await makeHFRequest('/admin/ia-pool/stats', 'GET', undefined, headers);
     res.json(statsData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] IA pool stats failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'IA pool stats failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-proxyRouter.post('/admin/ingest-ia', async (req, res) => {
+proxyRouter.post('/admin/ingest-ia', async (req: Request, res: Response) => {
   try {
-    const adminKey = req.headers['x-admin-key'];
     const headers: Record<string, string> = {};
-    if (adminKey) {
-      headers['X-Admin-Key'] = adminKey as string;
-    }
-    
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey) headers['X-Admin-Key'] = String(adminKey);
     console.log('[PROXY] Admin IA ingest request', req.body);
     const ingestData = await makeHFRequest('/admin/ingest-ia', 'POST', req.body, headers);
     res.json(ingestData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] IA ingest failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'IA ingest failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-proxyRouter.post('/admin/cache-ia', async (req, res) => {
+proxyRouter.post('/admin/cache-ia', async (req: Request, res: Response) => {
   try {
-    const adminKey = req.headers['x-admin-key'];
     const headers: Record<string, string> = {};
-    if (adminKey) {
-      headers['X-Admin-Key'] = adminKey as string;
-    }
-    
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey) headers['X-Admin-Key'] = String(adminKey);
     console.log('[PROXY] Admin IA cache request', req.body);
     const cacheData = await makeHFRequest('/admin/cache-ia', 'POST', req.body, headers);
     res.json(cacheData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] IA cache failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'IA cache failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-proxyRouter.post('/admin/generate-today', async (req, res) => {
+proxyRouter.post('/admin/generate-today', async (req: Request, res: Response) => {
   try {
-    const adminKey = req.headers['x-admin-key'];
     const headers: Record<string, string> = {};
-    if (adminKey) {
-      headers['X-Admin-Key'] = adminKey as string;
-    }
-    
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey) headers['X-Admin-Key'] = String(adminKey);
     console.log('[PROXY] Admin generate today request');
     const generateData = await makeHFRequest('/admin/generate-today', 'POST', req.body, headers);
     res.json(generateData);
-  } catch (error) {
+  } catch (error: any) {
     console.error('[PROXY] Generate today failed:', error);
     res.status(500).json({
       status: 'error',
       message: 'Generate today failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-      timestamp: new Date().toISOString()
+      error: error?.message || 'Unknown error',
+      timestamp: new Date().toISOString(),
     });
   }
 });
 
-// Mount the proxy router
+// Mount the proxy router at /api/proxy
 app.use('/api/proxy', proxyRouter);
 
-// Add a root health check
-app.get('/health', (req, res) => {
+// Root health
+app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'devvit-stroke-server',
     timestamp: new Date().toISOString(),
-    hf_base_url: HF_BASE_URL
+    hf_base_url: HF_BASE_URL,
   });
 });
 
-// ---- SERVER STARTUP ----
+// ----------------------------------------------------------------------------
+// Server start
+// ----------------------------------------------------------------------------
 const port = getServerPort();
 const server = createServer(app);
-server.on('error', (err) => console.error(`server error; ${err.stack}`));
+server.on('error', (err) => console.error(`server error; ${err instanceof Error ? err.stack : String(err)}`));
 server.listen(port);
 
 console.log(`Server starting on port ${port}`);
