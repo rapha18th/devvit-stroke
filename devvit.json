@@ -1,16 +1,8 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "devvit-stroke",
-  "post": {
-    "dir": "dist/client",
-    "entrypoints": {
-      "default": { "entry": "index.html" }
-    }
-  },
-  "server": {
-    "dir": "dist/server",
-    "entry": "index.cjs"
-  },
+  "post": { "dir": "dist/client", "entrypoints": { "default": { "entry": "index.html" } } },
+  "server": { "dir": "dist/server", "entry": "index.cjs" },
   "permissions": {
     "http": {
       "enable": true,
@@ -21,37 +13,16 @@
     "content": {
       "csp": {
         "default-src": ["'self'"],
-        "img-src": [
-          "'self'",
-          "data:",
-          "https://*.redd.it",
-          "https://i.redd.it",
-          "https://i.imgur.com",
-          "https://archive.org",
-          "https://storage.googleapis.com",
-          "https://*.googleapis.com",
-          "https://*.googleusercontent.com"
-        ],
+        "img-src": ["'self'", "data:", "https://*.redd.it", "https://i.redd.it", "https://i.imgur.com", "https://archive.org", "https://storage.googleapis.com", "https://*.googleapis.com", "https://*.googleusercontent.com"],
         "style-src": ["'self'", "'unsafe-inline'"],
         "script-src": ["'self'"],
-        "connect-src": [
-          "'self'",
-          "https://*.reddit.com",
-          "https://*.devvit.net"
-        ]
+        "connect-src": ["'self'", "https://*.reddit.com", "https://*.devvit.net"]
       }
     }
   },
-  "media": {},
   "menu": {
     "items": [
-      {
-        "label": "Create a new post",
-        "description": "devvit-stroke",
-        "location": "subreddit",
-        "forUserType": "moderator",
-        "endpoint": "/internal/menu/post-create"
-      }
+      { "label": "Create a new post", "description": "devvit-stroke", "location": "subreddit", "forUserType": "moderator", "endpoint": "/internal/menu/post-create" }
     ]
   },
   "triggers": { "onAppInstall": "/internal/on-app-install" },
