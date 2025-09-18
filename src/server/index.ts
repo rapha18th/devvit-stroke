@@ -1,5 +1,5 @@
 import express from 'express';
-import { reddit, createServer, context, getServerPort } from '@devvit/web/server';
+import { reddit, createServer, context, getServerPort, Devvit } from '@devvit/web/server';
 import { createPost } from './core/post';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 
@@ -90,17 +90,8 @@ async function forwardRequest(req, res, path, options = {}) {
     const userId = user?.id ?? `anon-${Date.now()}`;
     const userName = user?.name ?? 'anonymous';
 
-    // Try multiple ways to get the HTTP client
-    let httpClient;
-    if (req.devvitContext?.http) {
-      httpClient = req.devvitContext.http;
-    } else if (context.http) {
-      httpClient = context.http;
-    } else {
-      throw new Error('No HTTP client available');
-    }
-
-    const response = await httpClient.fetch(url, {
+    // Use Devvit's HTTP service directly
+    const response = await Devvit.http.fetch(url, {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
