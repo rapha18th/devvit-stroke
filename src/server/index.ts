@@ -70,19 +70,20 @@ router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
 // Use the main router
 app.use(router);
 
-// ---- PROXY ROUTER WITH REAL HF API CALLS ----
+// ---- PROXY ROUTER WITH DEVVIT HTTP CLIENT ----
 const proxyRouter = express.Router();
 
 // Base URL for your Hugging Face server
 const HF_BASE_URL = 'https://rairo-dev-stroke.hf.space';
 
-// Helper function to make requests to HF server
+// Helper function to make requests to HF server using Devvit's HTTP client
 async function makeHFRequest(endpoint: string, method: 'GET' | 'POST' = 'GET', data?: any, headers?: Record<string, string>) {
   const url = `${HF_BASE_URL}${endpoint}`;
   
   try {
     const requestOptions: any = {
-      method,
+      url: url,
+      method: method,
       headers: {
         'Content-Type': 'application/json',
         'User-Agent': 'DevvitStrokeApp/1.0',
@@ -99,15 +100,15 @@ async function makeHFRequest(endpoint: string, method: 'GET' | 'POST' = 'GET', d
       console.log(`[PROXY] Request body:`, JSON.stringify(data, null, 2));
     }
     
-    const response = await fetch(url, requestOptions);
+    // Use Devvit's HTTP client instead of fetch
+    const response = await reddit.http(requestOptions);
     
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`[PROXY] HTTP ${response.status} error from ${endpoint}:`, errorText);
-      throw new Error(`HTTP ${response.status}: ${response.statusText} - ${errorText}`);
+      console.error(`[PROXY] HTTP ${response.status} error from ${endpoint}:`, response.body);
+      throw new Error(`HTTP ${response.status}: ${response.statusText} - ${response.body}`);
     }
 
-    const responseData = await response.json();
+    const responseData = JSON.parse(response.body || '{}');
     console.log(`[PROXY] Success response from ${endpoint}:`, JSON.stringify(responseData, null, 2));
     
     return responseData;
@@ -333,6 +334,41 @@ proxyRouter.get('/leaderboard/daily', async (req, res) => {
       status: 'error',
       message: 'Failed to fetch leaderboard',
       error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
+// Debug endpoint to test connectivity
+proxyRouter.get('/debug', async (req, res) => {
+  try {
+    console.log('[DEBUG] Testing basic connectivity to HF server');
+    
+    // Test with a simple GET request using Devvit's HTTP client
+    const testResponse = await reddit.http({
+      url: 'https://rairo-dev-stroke.hf.space/health',
+      method: 'GET',
+      headers: {
+        'User-Agent': 'DevvitStrokeApp/1.0'
+      }
+    });
+    
+    console.log('[DEBUG] Test response:', testResponse);
+    
+    res.json({
+      success: true,
+      status: testResponse.status,
+      statusText: testResponse.statusText,
+      body: testResponse.body,
+      ok: testResponse.ok,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[DEBUG] Test failed:', error);
+    res.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
       timestamp: new Date().toISOString()
     });
   }
