@@ -44,7 +44,7 @@ export default function App() {
       try {
         const user = detectUser();
         push(`User: ${JSON.stringify(user)}`);
-        const payload = await startToday(user);
+        const payload = await startToday();
         push("startToday OK");
         setCaseData(payload.case as CasePublic);
         setSessionId(payload.session_id);
