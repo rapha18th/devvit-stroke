@@ -90,8 +90,8 @@ async function forwardRequest(req, res, path, options = {}) {
     const userId = user?.id ?? `anon-${context.requestId}`;
     const userName = user?.name ?? 'anonymous';
 
-    // Make the external request using fetch.
-    const response = await fetch(url, {
+    // FIXED: Use context.http.fetch instead of native fetch
+    const response = await context.http.fetch(url, {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
