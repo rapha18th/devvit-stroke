@@ -1,35 +1,28 @@
-// src/client/src/api.ts
-export const API_BASE =
-  (globalThis as any).__HS_API_BASE ||
-  "https://rairo-dev-stroke.hf.space";
+// The API_BASE now points to your own server's proxy endpoints.
+export const API_BASE = "/api/proxy";
 
 function log(...args: any[]) {
   console.log("[API]", ...args);
 }
 
-function headersWithUser() {
-  const g = globalThis as any;
-  if (!g.__hs_uid) g.__hs_uid = "anon-" + Math.random().toString(36).slice(2);
-  if (!g.__hs_uname) g.__hs_uname = "anon";
+// This function is now much simpler. The server adds the secure user headers.
+function standardHeaders() {
   return {
     "Content-Type": "application/json",
-    "X-Reddit-Id": g.__hs_uid,
-    "X-Reddit-User": g.__hs_uname,
   };
 }
 
+/**
+ * A wrapper around fetch to handle JSON and errors for same-origin requests.
+ */
 async function fetchJSON(url: string, init?: RequestInit) {
   log("fetch", url, init?.method || "GET");
   try {
     const res = await fetch(url, {
-      mode: "cors",
-      redirect: "follow",
       ...init,
-      headers: { ...(init?.headers || {}), ...headersWithUser() },
+      headers: { ...(init?.headers || {}), ...standardHeaders() },
     });
     log("status", res.status, res.statusText);
-    // Helpful for CSP diagnostics
-    log("res headers", Object.fromEntries(res.headers.entries()));
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       throw new Error(`HTTP ${res.status} ${res.statusText} :: ${text.slice(0, 400)}`);
@@ -47,12 +40,13 @@ export async function health() {
   return fetchJSON(url);
 }
 
-export async function startToday(user: { id: string; name: string }) {
+// The 'user' parameter is no longer needed here, as the server gets the user context.
+export async function startToday() {
   const url = `${API_BASE}/cases/today/start`;
   log("startToday ->", url);
   return fetchJSON(url, {
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify({}), // Body is still sent if your backend needs it.
   });
 }
 
@@ -61,6 +55,7 @@ export async function callToolSignature(caseId: string, sessionId: string, image
   return fetchJSON(url, {
     method: "POST",
     headers: {
+      // The session ID is passed as a header to our server, which then forwards it.
       "X-Session-Id": sessionId,
     },
     body: JSON.stringify({ image_index: imageIndex }),
