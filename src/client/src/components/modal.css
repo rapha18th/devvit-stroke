@@ -1,0 +1,78 @@
+/* src/client/src/components/modal.css */
+
+.hs-modal__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.hs-modal {
+  background: #121214;
+  border: 1px solid #2a2a2e;
+  border-radius: 12px;
+  width: min(720px, 94vw);
+  max-height: 86vh;
+  color: #eaeaea;
+  box-shadow: 0 8px 32px rgba(0,0,0,.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.hs-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid #2a2a2e;
+  background: linear-gradient(180deg, #17171a, #141417);
+}
+
+.hs-modal__title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.hs-modal__close {
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: #9aa0a6;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.hs-modal__body {
+  padding: 16px;
+  overflow: auto;
+}
+
+.hs-modal__footer {
+  padding: 12px 16px;
+  border-top: 1px solid #2a2a2e;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.hs-btn {
+  background: #2b65d9;
+  color: white;
+  border: 0;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hs-btn.secondary {
+  background: #232327;
+  color: #eaeaea;
+  border: 1px solid #2a2a2e;
+}
