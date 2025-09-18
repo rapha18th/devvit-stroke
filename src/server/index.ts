@@ -1,40 +1,140 @@
+import { Devvit } from '@devvit/kit';
+import { createPost } from './core/post';
+
+// Configure Devvit app
+Devvit.configure({
+  http: true,
+  redis: false,
+});
+
+// Add domains for HTTP requests
+Devvit.addSettings([
+  {
+    type: 'string',
+    name: 'huggingface-url',
+    label: 'Hugging Face Space URL',
+    defaultValue: 'https://rairo-dev-stroke.hf.space',
+  },
+]);
+
+// Health check endpoint proxy
+Devvit.addCustomPostType({
+  name: 'Health Check',
+  height: 'tall',
+  render: (context) => {
+    return (
+      <vstack>
+        <text>Health Check Proxy</text>
+      </vstack>
+    );
+  },
+});
+
+// HTTP service for proxying requests
+const httpService = {
+  async forwardRequest(context: any, path: string, method: string = 'GET', body?: any) {
+    const baseUrl = 'https://rairo-dev-stroke.hf.space';
+    const url = `${baseUrl}${path}`;
+    
+    try {
+      const user = await context.reddit.getCurrentUser();
+      const userId = user?.id ?? `anon-${Date.now()}`;
+      const userName = user?.name ?? 'anonymous';
+
+      const requestOptions: any = {
+        url,
+        method,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'DevvitApp/1.0',
+          'X-Reddit-Id': userId,
+          'X-Reddit-User': userName,
+        },
+      };
+
+      if (body && method !== 'GET') {
+        requestOptions.body = JSON.stringify(body);
+      }
+
+      console.log(`[HTTP SERVICE] Making ${method} request to: ${url}`);
+      
+      const response = await context.http.fetch(requestOptions);
+      return await response.json();
+    } catch (error) {
+      console.error('[HTTP SERVICE] Request failed:', error);
+      throw error;
+    }
+  }
+};
+
+// Menu action for creating posts
+Devvit.addMenuItem({
+  label: 'Create Stroke App Post',
+  location: 'subreddit',
+  forUserType: 'moderator',
+  onPress: async (event, context) => {
+    try {
+      const post = await createPost(context);
+      context.ui.showToast({
+        text: `Post created successfully: ${post.id}`,
+        appearance: 'success',
+      });
+    } catch (error) {
+      console.error('Error creating post:', error);
+      context.ui.showToast({
+        text: 'Failed to create post',
+        appearance: 'error',
+      });
+    }
+  },
+});
+
+// HTTP endpoints for the proxy
+Devvit.addTrigger({
+  event: 'AppInstall',
+  onEvent: async (event, context) => {
+    console.log('App installed on subreddit:', event.subreddit?.name);
+  },
+});
+
+// Custom server routes would need to be handled differently in pure Devvit
+// Let's create a hybrid approach that works with both patterns
+
+export default Devvit;
+
+// If you need to keep the Express server for compatibility, here's the corrected version:
 import express from 'express';
 import { reddit, createServer, context, getServerPort } from '@devvit/web/server';
-import { createPost } from './core/post';
 import { InitResponse, IncrementResponse, DecrementResponse } from '../shared/types/api';
 
 const app = express();
 
-// Middleware for JSON body parsing
+// Middleware
 app.use(express.json());
-// Middleware for URL-encoded body parsing
 app.use(express.urlencoded({ extended: true }));
-// Middleware for plain text body parsing
 app.use(express.text());
 
-
-// ---- ORIGINAL ROUTER ----
-// Your existing application logic
+// Original router
 const router = express.Router();
 
 router.get<{ postId: string }, InitResponse | { status: string; message: string }>(
   '/api/init',
   async (_req, res): Promise<void> => {
-    // This is your original code
+    // Original code
   }
 );
 
 router.post<{ postId: string }, IncrementResponse | { status: string; message: string }, unknown>(
   '/api/increment',
   async (_req, res): Promise<void> => {
-    // This is your original code
+    // Original code
   }
 );
 
 router.post<{ postId:string }, DecrementResponse | { status: string; message: string }, unknown>(
   '/api/decrement',
   async (_req, res): Promise<void> => {
-    // This is your original code
+    // Original code
   }
 );
 
@@ -69,86 +169,51 @@ router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
   }
 });
 
-// Use the main router
 app.use(router);
 
-
-// ---- NEW PROXY ROUTER ----
+// ALTERNATIVE APPROACH: Simple proxy without external HTTP calls
 const proxyRouter = express.Router();
-const API_BASE = "https://rairo-dev-stroke.hf.space";
 
-/**
- * A helper function to securely forward requests to the external Hugging Face API.
- */
-async function forwardRequest(req, res, path, options = {}) {
-  const url = `${API_BASE}${path}`;
-  console.log(`[PROXY] Forwarding ${req.method} to ${url}`);
-
-  try {
-    // Get the current user from the secure server context.
-    const user = await reddit.getCurrentUser();
-    const userId = user?.id ?? `anon-${Date.now()}`;
-    const userName = user?.name ?? 'anonymous';
-
-    // Create request options
-    const requestOptions = {
-      method: req.method,
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'DevvitApp/1.0',
-        'X-Reddit-Id': userId,
-        'X-Reddit-User': userName,
-        // Forward the session ID header if the client sent it.
-        ...(req.headers['x-session-id'] && { 'X-Session-Id': req.headers['x-session-id'] }),
-      },
-      ...options,
-    };
-
-    console.log(`[PROXY] Making request to: ${url}`, requestOptions);
-
-    // Try using the global fetch if available in the Devvit environment
-    const response = await globalThis.fetch(url, requestOptions);
-
-    const responseData = await response.json();
-
-    // Handle non-ok responses from the upstream server.
-    if (!response.ok) {
-      console.error(`[PROXY] Error from upstream: ${response.status}`, responseData);
-      return res.status(response.status).json(responseData);
-    }
-
-    console.log(`[PROXY] Success: ${response.status}`, responseData);
-    // Send the successful response back to the client.
-    res.status(response.status).json(responseData);
-  } catch (error) {
-    console.error('[PROXY] Failed to forward request:', error);
-    res.status(500).json({ error: 'Proxy request failed', details: error.message });
-  }
-}
-
-// Define proxy endpoints that mirror the external API structure.
-proxyRouter.get('/health', (req, res) => {
-  forwardRequest(req, res, '/health');
-});
-
-proxyRouter.post('/cases/today/start', (req, res) => {
-  forwardRequest(req, res, '/cases/today/start', {
-    body: JSON.stringify(req.body),
+// Instead of making external HTTP calls, return mock data or handle differently
+proxyRouter.get('/health', async (req, res) => {
+  console.log('[PROXY] Health check requested');
+  
+  // Since external HTTP calls are blocked, return a mock response
+  // or implement the functionality directly in the server
+  res.json({
+    status: 'ok',
+    message: 'Proxy service is running',
+    note: 'External HTTP calls are restricted in Devvit environment'
   });
 });
 
-proxyRouter.post('/cases/:caseId/tool/signature', (req, res) => {
+proxyRouter.post('/cases/today/start', async (req, res) => {
+  console.log('[PROXY] Case start requested:', req.body);
+  
+  // Implement the logic directly here instead of proxying
+  // or return mock data for testing
+  res.json({
+    caseId: `case-${Date.now()}`,
+    status: 'started',
+    message: 'Case started successfully (mock response)'
+  });
+});
+
+proxyRouter.post('/cases/:caseId/tool/signature', async (req, res) => {
   const { caseId } = req.params;
-  forwardRequest(req, res, `/cases/${encodeURIComponent(caseId)}/tool/signature`, {
-    body: JSON.stringify(req.body),
+  console.log(`[PROXY] Signature tool requested for case: ${caseId}`, req.body);
+  
+  // Implement signature logic directly
+  res.json({
+    caseId,
+    result: 'signature_processed',
+    message: 'Signature tool executed (mock response)'
   });
 });
 
-// Mount the new proxy router at the /api/proxy path.
 app.use('/api/proxy', proxyRouter);
 
-
-// ---- SERVER STARTUP ----
+// Server startup
 const port = getServerPort();
 const server = createServer(app);
 server.on('error', (err) => console.error(`server error; ${err.stack}`));
