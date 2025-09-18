@@ -87,11 +87,20 @@ async function forwardRequest(req, res, path, options = {}) {
   try {
     // Get the current user from the secure server context.
     const user = await reddit.getCurrentUser();
-    const userId = user?.id ?? `anon-${context.requestId}`;
+    const userId = user?.id ?? `anon-${Date.now()}`;
     const userName = user?.name ?? 'anonymous';
 
-    // FIXED: Use context.http.fetch instead of native fetch
-    const response = await context.http.fetch(url, {
+    // Try multiple ways to get the HTTP client
+    let httpClient;
+    if (req.devvitContext?.http) {
+      httpClient = req.devvitContext.http;
+    } else if (context.http) {
+      httpClient = context.http;
+    } else {
+      throw new Error('No HTTP client available');
+    }
+
+    const response = await httpClient.fetch(url, {
       method: req.method,
       headers: {
         'Content-Type': 'application/json',
@@ -115,7 +124,7 @@ async function forwardRequest(req, res, path, options = {}) {
     res.status(response.status).json(responseData);
   } catch (error) {
     console.error('[PROXY] Failed to forward request:', error);
-    res.status(500).json({ error: 'Proxy request failed' });
+    res.status(500).json({ error: 'Proxy request failed', details: error.message });
   }
 }
 
