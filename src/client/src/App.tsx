@@ -47,10 +47,17 @@ export default function App() {
     })();
   }, []);
 
+  // ✅ FIX: no assignments inside expressions; do it step-by-step
   function detectUser() {
-    // Devvit injects a token; in practice we’ll just fabricate a stable anon id.
-    const id = (globalThis as any).__hs_uid || (globalThis as any).__hs_uid = ("anon-" + Math.random().toString(36).slice(2));
-    const name = (globalThis as any).__hs_uname || (globalThis as any).__hs_uname = "anon";
+    const g = globalThis as any;
+    if (!g.__hs_uid) {
+      g.__hs_uid = "anon-" + Math.random().toString(36).slice(2);
+    }
+    if (!g.__hs_uname) {
+      g.__hs_uname = "anon";
+    }
+    const id = g.__hs_uid as string;
+    const name = g.__hs_uname as string;
     return { id, name };
   }
 
