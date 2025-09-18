@@ -1,23 +1,22 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "devvit-stroke",
-
-  "post": { "dir": "dist/client", "entrypoints": { "default": { "entry": "index.html" } } },
-  "server": { "dir": "dist/server", "entry": "index.cjs" },
-
-  // Newer CLIs read from permissions.http
+  "post": {
+    "dir": "dist/client",
+    "entrypoints": {
+      "default": { "entry": "index.html" }
+    }
+  },
+  "server": {
+    "dir": "dist/server",
+    "entry": "index.cjs"
+  },
   "permissions": {
     "http": {
       "enable": true,
       "domains": ["rairo-dev-stroke.hf.space"]
     }
   },
-
-  // Some older CLIs still look here; harmless to keep both
-  "http": {
-    "domains": ["rairo-dev-stroke.hf.space"]
-  },
-
   "webview": {
     "content": {
       "csp": {
@@ -43,7 +42,7 @@
       }
     }
   },
-
+  "media": {},
   "menu": {
     "items": [
       {
@@ -55,7 +54,6 @@
       }
     ]
   },
-
   "triggers": { "onAppInstall": "/internal/on-app-install" },
   "dev": { "subreddit": "devvit_stroke_dev2" }
 }
