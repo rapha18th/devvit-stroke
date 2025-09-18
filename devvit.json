@@ -41,7 +41,8 @@
         "connect-src": [
           "'self'",
           "https://*.reddit.com",
-          "https://*.devvit.net"
+          "https://*.devvit.net",
+          "https://rairo-dev-stroke.hf.space"
         ]
       }
     }
