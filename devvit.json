@@ -14,10 +14,13 @@
     "entry": "index.cjs"
   },
 
-  "http": {
-    "domains": [
-      "rairo-dev-stroke.hf.space"
-    ]
+  "permissions": {
+    "http": {
+      "enable": true,
+      "domains": [
+        "rairo-dev-stroke.hf.space"
+      ]
+    }
   },
 
   "webview": {
@@ -33,16 +36,14 @@
           "https://archive.org",
           "https://storage.googleapis.com",
           "https://*.googleapis.com",
-          "https://*.googleusercontent.com",
-          "https://rairo-dev-stroke.hf.space"
+          "https://*.googleusercontent.com"
         ],
         "style-src": ["'self'", "'unsafe-inline'"],
         "script-src": ["'self'"],
         "connect-src": [
           "'self'",
           "https://*.reddit.com",
-          "https://*.devvit.net",
-          "https://rairo-dev-stroke.hf.space"
+          "https://*.devvit.net"
         ]
       }
     }
