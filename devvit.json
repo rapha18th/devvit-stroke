@@ -1,38 +1,52 @@
 {
   "$schema": "https://developers.reddit.com/schema/config-file.v1.json",
   "name": "devvit-stroke",
+
   "post": {
     "dir": "dist/client",
     "entrypoints": {
       "default": {
         "entry": "index.html"
       }
-    },
-    "csp": {
-      "connect-src": [
-        "'self'",
-        "https://rairo-dev-stroke.hf.space",
-        "https://storage.googleapis.com",
-        "https://firebasestorage.googleapis.com"
-      ],
-      "img-src": [
-        "'self'",
-        "data:",
-        "https://rairo-dev-stroke.hf.space",
-        "https://storage.googleapis.com",
-        "https://firebasestorage.googleapis.com"
-      ],
-      "media-src": [
-        "'self'",
-        "https://rairo-dev-stroke.hf.space"
-      ]
     }
   },
+
   "server": {
     "dir": "dist/server",
     "entry": "index.cjs"
   },
+
+  "webview": {
+    "content": {
+      "csp": {
+        "default-src": ["'self'"],
+        "img-src": [
+          "'self'",
+          "data:",
+          "https://*.redd.it",
+          "https://i.redd.it",
+          "https://i.imgur.com",
+          "https://archive.org",
+          "https://storage.googleapis.com",
+          "https://*.googleapis.com",
+          "https://*.googleusercontent.com",
+          "https://*.hf.space"
+        ],
+        "script-src": ["'self'"],
+        "style-src": ["'self'", "'unsafe-inline'"],
+        "connect-src": [
+          "'self'",
+          "https://rairo-dev-stroke.hf.space",
+          "https://archive.org",
+          "https://storage.googleapis.com",
+          "https://*.googleapis.com"
+        ]
+      }
+    }
+  },
+
   "media": {},
+
   "menu": {
     "items": [
       {
@@ -44,9 +58,11 @@
       }
     ]
   },
+
   "triggers": {
     "onAppInstall": "/internal/on-app-install"
   },
+
   "dev": {
     "subreddit": "devvit_stroke_dev2"
   }
