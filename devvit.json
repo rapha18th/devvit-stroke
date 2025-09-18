@@ -7,6 +7,25 @@
       "default": {
         "entry": "index.html"
       }
+    },
+    "csp": {
+      "connect-src": [
+        "'self'",
+        "https://rairo-dev-stroke.hf.space",
+        "https://storage.googleapis.com",
+        "https://firebasestorage.googleapis.com"
+      ],
+      "img-src": [
+        "'self'",
+        "data:",
+        "https://rairo-dev-stroke.hf.space",
+        "https://storage.googleapis.com",
+        "https://firebasestorage.googleapis.com"
+      ],
+      "media-src": [
+        "'self'",
+        "https://rairo-dev-stroke.hf.space"
+      ]
     }
   },
   "server": {
