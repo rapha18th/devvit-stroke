@@ -1,26 +1,19 @@
 // src/client/api.ts
-// Single base for your own server's proxy endpoints.
 export const API_BASE = "/api/proxy";
 
 function log(...args: any[]) {
-  // keep it noisy during the hackathon
   console.log("[API]", ...args);
 }
 
-// server injects reddit headers; we only need JSON here
 function standardHeaders() {
   return { "Content-Type": "application/json" };
 }
 
-/** tiny helper around fetch that always returns JSON or throws with detail */
 async function fetchJSON(url: string, init?: RequestInit) {
   const method = init?.method || "GET";
   log(method, url);
   try {
-    const res = await fetch(url, {
-      ...init,
-      headers: { ...(init?.headers || {}), ...standardHeaders() },
-    });
+    const res = await fetch(url, { ...init, headers: { ...(init?.headers || {}), ...standardHeaders() } });
     log("→", res.status, res.statusText);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -34,7 +27,7 @@ async function fetchJSON(url: string, init?: RequestInit) {
   }
 }
 
-// ------------ simple API surface used by the UI ------------
+// ---------------- API surface ----------------
 
 export async function health() {
   return fetchJSON(`${API_BASE}/health`);
@@ -43,7 +36,7 @@ export async function health() {
 export async function startToday() {
   return fetchJSON(`${API_BASE}/cases/today/start`, {
     method: "POST",
-    body: JSON.stringify({}), // keep shape consistent with server
+    body: JSON.stringify({}),
   });
 }
 
@@ -67,7 +60,7 @@ export async function callToolFinancial(caseId: string, sessionId: string) {
   return fetchJSON(`${API_BASE}/cases/${encodeURIComponent(caseId)}/tool/financial`, {
     method: "POST",
     headers: { "X-Session-Id": sessionId },
-    body: JSON.stringify({}), // no params needed
+    body: JSON.stringify({}),
   });
 }
 
@@ -83,17 +76,22 @@ export async function getDailyLeaderboard() {
   return fetchJSON(`${API_BASE}/leaderboard/daily`);
 }
 
-// Exposed types (very light so you don’t need to import from server code)
-export type CasePublic = {
-  case_id: string;
-  mode: "knowledge" | "observation";
-  brief: string;
-  images: string[];
-  signature_crops: string[];
-  metadata: any[];
-  ledger_summary: string;
-  timer_seconds: number;
-  initial_ip: number;
-  tool_costs: { signature: number; metadata: number; financial: number };
-  credits: any;
-};
+// -------- convenience helpers for “compare all” --------
+
+export async function compareSignature(caseId: string, sessionId: string) {
+  const [a, b, c] = await Promise.all([
+    callToolSignature(caseId, sessionId, 0),
+    callToolSignature(caseId, sessionId, 1),
+    callToolSignature(caseId, sessionId, 2),
+  ]);
+  return [a, b, c] as const; // {crop_url, hint, ip_remaining} x3
+}
+
+export async function compareMetadata(caseId: string, sessionId: string) {
+  const [a, b, c] = await Promise.all([
+    callToolMetadata(caseId, sessionId, 0),
+    callToolMetadata(caseId, sessionId, 1),
+    callToolMetadata(caseId, sessionId, 2),
+  ]);
+  return [a, b, c] as const; // {flags:[...], ip_remaining} x3
+}
