@@ -1,13 +1,4 @@
-import type {
-  StartResponse,
-  SignatureToolResponse,
-  HintToolResponse,
-  GuessResponse,
-  LeaderboardDaily
-} from './types';
-
-
-// Allow override via ?api=... (handy for playtest), then env, then hard fallback.
+// Allow override via ?api=... then Vite env, then hard fallback.
 const fromQuery = new URLSearchParams(window.location.search).get('api');
 export const API_BASE =
   (fromQuery || import.meta.env.VITE_API_BASE || 'https://rairo-dev-stroke.hf.space')
@@ -15,103 +6,94 @@ export const API_BASE =
 
 console.log('[HiddenStroke] API_BASE =', API_BASE);
 
-export async function startCase(user: string, uid: string) {
-  const r = await fetch(`${API_BASE}/cases/today/start`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'X-Reddit-User': user || 'Playtester',
-      'X-Reddit-Id': uid || 't2_playtester'
-    }
-  });
-  if (!r.ok) {
-    const t = await r.text().catch(() => '');
-    throw new Error(`startCase failed: ${r.status} ${t}`);
+type JSONValue = any;
+
+// Convenience fetch wrapper that always surfaces error bodies.
+async function jfetch<T = JSONValue>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, init);
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`${res.status} ${text}`);
   }
-  return r.json();
+  try {
+    return JSON.parse(text) as T;
+  } catch {
+    return text as unknown as T;
+  }
 }
 
+export async function health() {
+  return jfetch('/health');
+}
 
-export type Identity = {
-  user: string;
-  uid: string;
+// Provide sane defaults if Reddit headers aren’t available (playtest/local)
+function redditHeaders() {
+  const user = (window as any).reddit?.user?.name ?? 'Playtester';
+  const id = (window as any).reddit?.user?.id ?? 't2_playtester';
+  return {
+    'X-Reddit-User': user,
+    'X-Reddit-Id': id,
+  };
+}
+
+export type StartCaseResponse = {
+  session_id: string;
+  case: {
+    case_id: string;
+    mode: 'knowledge'|'observation';
+    brief: string;
+    style_period: string;
+    images: string[];
+    signature_crops: string[];
+    metadata: Array<Record<string, any>>;
+    ledger_summary: string;
+    timer_seconds: number;
+    initial_ip: number;
+    tool_costs: { signature: number; metadata: number; financial: number };
+    credits: Record<string,string>;
+  };
 };
 
-function getIdentity(): Identity {
-  const q = new URLSearchParams(window.location.search);
-  const user = q.get('user') || 'anon';
-  const uid = q.get('uid') || (() => {
-    const k = 'hs_anon_id';
-    let v = localStorage.getItem(k);
-    if (!v) {
-      v = `anon-${crypto.randomUUID()}`;
-      localStorage.setItem(k, v);
-    }
-    return v;
-  })();
-  return { user, uid };
-}
-
-async function fetchJson<T>(
-  path: string,
-  opts: { method?: string; body?: any; sessionId?: string } = {}
-): Promise<T> {
-  const { user, uid } = getIdentity();
-  const method = opts.method || 'GET';
-  const headers: Record<string, string> = {
-    'X-Reddit-User': user,
-    'X-Reddit-Id': uid
-  };
-  if (method !== 'GET') headers['Content-Type'] = 'application/json';
-  if (opts.sessionId) headers['X-Session-Id'] = opts.sessionId;
-
-  const res = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: method === 'GET' ? undefined : JSON.stringify(opts.body || {})
-  });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status}: ${txt || res.statusText}`);
-  }
-  return res.json() as Promise<T>;
-}
-
-export async function apiStartToday(): Promise<StartResponse> {
-  return fetchJson<StartResponse>('/cases/today/start', { method: 'POST' });
-}
-
-export async function apiToolSignature(sessionId: string, caseId: string, imageIndex: number) {
-  return fetchJson<SignatureToolResponse>(`/cases/${caseId}/tool/signature`, {
+export async function startCase(): Promise<StartCaseResponse> {
+  return jfetch('/cases/today/start', {
     method: 'POST',
-    sessionId,
-    body: { image_index: imageIndex }
+    headers: { 'content-type': 'application/json', ...redditHeaders() },
   });
 }
 
-export async function apiToolMetadata(sessionId: string, caseId: string, imageIndex: number) {
-  return fetchJson<HintToolResponse>(`/cases/${caseId}/tool/metadata`, {
+export async function toolSignature(caseId: string, idx: number) {
+  return jfetch(`/cases/${caseId}/tool/signature`, {
     method: 'POST',
-    sessionId,
-    body: { image_index: imageIndex }
+    headers: { 'content-type': 'application/json', ...redditHeaders() },
+    body: JSON.stringify({ image_index: idx }),
   });
 }
 
-export async function apiToolFinancial(sessionId: string, caseId: string) {
-  return fetchJson<HintToolResponse>(`/cases/${caseId}/tool/financial`, {
+export async function toolMetadata(caseId: string, idx: number) {
+  return jfetch(`/cases/${caseId}/tool/metadata`, {
     method: 'POST',
-    sessionId
+    headers: { 'content-type': 'application/json', ...redditHeaders() },
+    body: JSON.stringify({ image_index: idx }),
   });
 }
 
-export async function apiGuess(sessionId: string, caseId: string, imageIndex: number, rationale?: string) {
-  return fetchJson<GuessResponse>(`/cases/${caseId}/guess`, {
+export async function toolFinancial(caseId: string) {
+  return jfetch(`/cases/${caseId}/tool/financial`, {
     method: 'POST',
-    sessionId,
-    body: { image_index: imageIndex, rationale }
+    headers: { 'content-type': 'application/json', ...redditHeaders() },
   });
 }
 
-export async function apiLeaderboardDaily(): Promise<LeaderboardDaily> {
-  return fetchJson<LeaderboardDaily>('/leaderboard/daily', { method: 'GET' });
+export async function submitGuess(caseId: string, idx: number, rationale: string) {
+  return jfetch(`/cases/${caseId}/guess`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', ...redditHeaders() },
+    body: JSON.stringify({ image_index: idx, rationale }),
+  });
+}
+
+export async function leaderboardDaily() {
+  return jfetch('/leaderboard/daily', {
+    headers: { ...redditHeaders() },
+  });
 }
