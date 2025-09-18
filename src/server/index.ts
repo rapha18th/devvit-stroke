@@ -18,23 +18,10 @@ const router = express.Router();
 router.get<{ postId: string }, InitResponse | { status: string; message: string }>(
   '/api/init',
   async (_req, res): Promise<void> => {
-    // This is your original code
+    // Your original code
   }
 );
-
-router.post<{ postId: string }, IncrementResponse | { status: string; message: string }, unknown>(
-  '/api/increment',
-  async (_req, res): Promise<void> => {
-    // This is your original code
-  }
-);
-
-router.post<{ postId:string }, DecrementResponse | { status: string; message: string }, unknown>(
-  '/api/decrement',
-  async (_req, res): Promise<void> => {
-    // This is your original code
-  }
-);
+// ... other original routes ...
 
 router.post('/internal/on-app-install', async (_req, res): Promise<void> => {
   try {
@@ -70,83 +57,74 @@ router.post('/internal/menu/post-create', async (_req, res): Promise<void> => {
 // Use the main router
 app.use(router);
 
-// ---- PROXY ROUTER WITH MOCK RESPONSES ----
+// ---- CORRECTED PROXY ROUTER ----
 const proxyRouter = express.Router();
+const API_BASE = "https://rairo-dev-stroke.hf.space";
 
-// Mock responses since external HTTP calls are blocked in Devvit
-proxyRouter.get('/health', async (req, res) => {
-  console.log('[PROXY] Health check requested');
-  
-  // Return mock health response
-  res.json({
-    status: 'ok',
-    message: 'Proxy service is running',
-    timestamp: new Date().toISOString(),
-    service: 'devvit-stroke-proxy'
+/**
+ * A helper function to securely forward requests to the external Hugging Face API.
+ */
+async function forwardRequest(req, res, path, options = {}) {
+  const url = `${API_BASE}${path}`;
+  console.log(`[PROXY] Forwarding ${req.method} to ${url}`);
+
+  try {
+    const user = await reddit.getCurrentUser();
+    const userId = user?.id ?? `anon-${context.requestId}`;
+    const userName = user?.name ?? 'anonymous';
+
+    const response = await fetch(url, {
+      method: req.method,
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Reddit-Id': userId,
+        'X-Reddit-User': userName,
+        ...(req.headers['x-session-id'] && { 'X-Session-Id': req.headers['x-session-id'] }),
+      },
+      ...options,
+    });
+
+    const responseData = await response.json();
+    console.log('[PROXY] Received response from upstream:', JSON.stringify(responseData));
+
+    if (!response.ok) {
+      console.error(`[PROXY] Error from upstream: ${response.status}`, responseData);
+      return res.status(response.status).json(responseData);
+    }
+
+    res.status(response.status).json(responseData);
+  } catch (error) {
+    console.error('[PROXY] Failed to forward request:', error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    res.status(500).json({
+        error: 'Proxy request failed',
+        details: errorMessage,
+    });
+  }
+}
+
+// Health check endpoint
+proxyRouter.get('/health', (req, res) => {
+  forwardRequest(req, res, '/health');
+});
+
+// Start case endpoint
+proxyRouter.post('/cases/today/start', (req, res) => {
+  forwardRequest(req, res, '/cases/today/start', {
+    body: JSON.stringify(req.body),
   });
 });
 
-proxyRouter.post('/cases/today/start', async (req, res) => {
-  console.log('[PROXY] Case start requested:', req.body);
-  
-  // Generate a mock case ID and return success response
-  const caseId = `case-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  
-  res.json({
-    caseId,
-    status: 'started',
-    message: 'Case started successfully',
-    timestamp: new Date().toISOString(),
-    sessionId: req.headers['x-session-id'] || null,
-    requestData: req.body
-  });
-});
-
-proxyRouter.post('/cases/:caseId/tool/signature', async (req, res) => {
+// Signature tool endpoint
+proxyRouter.post('/cases/:caseId/tool/signature', (req, res) => {
   const { caseId } = req.params;
-  console.log(`[PROXY] Signature tool requested for case: ${caseId}`, req.body);
-  
-  // Mock signature processing
-  res.json({
-    caseId,
-    tool: 'signature',
-    status: 'processed',
-    result: {
-      signatureDetected: true,
-      confidence: 0.85,
-      analysis: 'Mock signature analysis completed',
-      coordinates: {
-        x: Math.floor(Math.random() * 500),
-        y: Math.floor(Math.random() * 300)
-      }
-    },
-    timestamp: new Date().toISOString(),
-    processingTime: Math.floor(Math.random() * 1000) + 500
-  });
-});
-
-// Add a test endpoint to verify the proxy is working
-proxyRouter.get('/test', async (req, res) => {
-  res.json({
-    message: 'Proxy router is working!',
-    timestamp: new Date().toISOString(),
-    userAgent: req.headers['user-agent'],
-    method: req.method,
-    path: req.path
+  forwardRequest(req, res, `/cases/${encodeURIComponent(caseId)}/tool/signature`, {
+    body: JSON.stringify(req.body),
   });
 });
 
 // Mount the proxy router
 app.use('/api/proxy', proxyRouter);
-
-// Add a root health check
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    service: 'devvit-stroke-server',
-    timestamp: new Date().toISOString()
-  });
-});
 
 // ---- SERVER STARTUP ----
 const port = getServerPort();
@@ -155,5 +133,3 @@ server.on('error', (err) => console.error(`server error; ${err.stack}`));
 server.listen(port);
 
 console.log(`Server starting on port ${port}`);
-
-export default app;
