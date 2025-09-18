@@ -35,7 +35,15 @@
         "script-src": ["'self'"],
         "connect-src": [
           "'self'",
-          "https://*"
+          "https://rairo-dev-stroke.hf.space",
+          "https://*.hf.space",
+          "https://*.huggingface.co",
+          "https://archive.org",
+          "https://storage.googleapis.com",
+          "https://*.googleapis.com",
+          "https://*.googleusercontent.com",
+          "https://*.reddit.com",
+          "https://*.devvit.net"
         ]
       }
     }
