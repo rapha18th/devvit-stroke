@@ -43,6 +43,21 @@ export default function App() {
     | null
     | { kind: "signature" | "metadata"; payload: any }
     | { kind: "image"; src: string; label: "A" | "B" | "C" }
+    | {
+        kind: "result";
+        payload: {
+          correct: boolean;
+          score: number;
+          timeLeft: number;
+          ipLeft: number;
+          reveal: {
+            authentic_index: number;
+            explanation?: string;
+            flags_signature?: string[];
+            flags_metadata?: string[];
+          };
+        };
+      }
   >(null);
   const [leader, setLeader] = useState<any>(null);
   const countdownActive = state === "ready" && tLeft > 0;
@@ -58,7 +73,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       push("[Boot] DOMContentLoaded");
-      push(`Booting Hidden Stroke… API base: ${API_BASE}`);
+      push(`Booting RedStroke… API base: ${API_BASE}`);
 
       try {
         const h = await health();
@@ -200,15 +215,26 @@ export default function App() {
             try {
               const rationale = (document.getElementById("rationale") as HTMLInputElement)?.value || "";
               const resp = await submitGuess(c.case_id, sid, pick!, rationale);
+
+              // Dedicated result modal (no reuse of metadata UI)
               setModal({
-                kind: "metadata", // reuse pane styling for a simple summary
+                kind: "result",
                 payload: {
-                  a: { flags: [`Score: ${resp.score}`] },
-                  b: { flags: [`Time left: ${resp.timeLeft}s`] },
-                  c: { flags: [`IP left: ${resp.ipLeft}`] },
+                  correct: !!resp.correct,
+                  score: resp.score ?? 0,
+                  timeLeft: resp.timeLeft ?? 0,
+                  ipLeft: resp.ipLeft ?? 0,
+                  reveal: resp.reveal ?? {
+                    authentic_index: 0,
+                    explanation: "",
+                    flags_signature: [],
+                    flags_metadata: [],
+                  },
                 },
               });
+
               setState("reveal");
+
               try {
                 const lb = await getDailyLeaderboard();
                 setLeader(lb);
@@ -236,6 +262,7 @@ export default function App() {
           {modal.kind === "signature" && <SignatureCompare crops={modal.payload} />}
           {modal.kind === "metadata" && <MetadataCompare flags={modal.payload} />}
           {modal.kind === "image" && <ImageModal src={modal.src} label={modal.label} onClose={() => setModal(null)} />}
+          {modal.kind === "result" && <ResultModal data={modal.payload} />}
         </Modal>
       )}
 
@@ -250,7 +277,7 @@ export default function App() {
 // ---------------- components ----------------
 
 function Header() {
-  return <h1>Hidden Stroke</h1>;
+  return <h1>RedStroke</h1>;
 }
 
 function ToolTray({
@@ -323,14 +350,64 @@ function MetadataCompare({ flags }: { flags: { a: any; b: any; c: any } }) {
   );
 }
 
-function ImageModal({ src, label, onClose }: { src: string; label: "A" | "B" | "C"; onClose: () => void }) {
+function ResultModal({
+  data,
+}: {
+  data: {
+    correct: boolean;
+    score: number;
+    timeLeft: number;
+    ipLeft: number;
+    reveal: {
+      authentic_index: number;
+      explanation?: string;
+      flags_signature?: string[];
+      flags_metadata?: string[];
+    };
+  };
+}) {
+  const { correct, score, timeLeft, ipLeft, reveal } = data;
+  const letters = ["A", "B", "C"] as const;
   return (
     <div>
-      <h3 style={{marginTop:0}}>Artwork {label}</h3>
+      <h3>Result</h3>
+      <p><strong>{correct ? "✅ Correct!" : "❌ Not quite."}</strong></p>
+      <ul>
+        <li><strong>Score:</strong> {score}</li>
+        <li><strong>Time left:</strong> {timeLeft}s</li>
+        <li><strong>IP left:</strong> {ipLeft}</li>
+        <li><strong>Authentic:</strong> {letters[reveal.authentic_index]}</li>
+      </ul>
+      {reveal.explanation && <p style={{ marginTop: 8 }}>{reveal.explanation}</p>}
+      {(reveal.flags_signature?.length || reveal.flags_metadata?.length) ? (
+        <details style={{ marginTop: 8 }}>
+          <summary>Why?</summary>
+          {reveal.flags_signature?.length ? (
+            <>
+              <h4>Signature</h4>
+              <ul>{reveal.flags_signature.map((f, i) => <li key={i}>{f}</li>)}</ul>
+            </>
+          ) : null}
+          {reveal.flags_metadata?.length ? (
+            <>
+              <h4>Metadata</h4>
+              <ul>{reveal.flags_metadata.map((f, i) => <li key={i}>{f}</li>)}</ul>
+            </>
+          ) : null}
+        </details>
+      ) : null}
+    </div>
+  );
+}
+
+function ImageModal({ src, label }: { src: string; label: "A" | "B" | "C" }) {
+  return (
+    <div>
+      <h3 style={{ marginTop: 0 }}>Artwork {label}</h3>
       <div className="imageWrap">
         <img src={src} alt={`Artwork ${label} (full view)`} />
       </div>
-      <p style={{marginTop:8}}>
+      <p style={{ marginTop: 8 }}>
         <a href={src} target="_blank" rel="noreferrer">Open original</a>
       </p>
     </div>
