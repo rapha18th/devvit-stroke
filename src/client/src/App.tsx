@@ -6,7 +6,6 @@ import {
   startToday,
   compareSignature,
   compareMetadata,
-  callToolFinancial,
   submitGuess,
   getDailyLeaderboard,
 } from "./api";
@@ -21,14 +20,11 @@ type CasePublic = {
   ledger_summary: string;
   timer_seconds: number;
   initial_ip: number;
-  tool_costs: { signature: number; metadata: number; financial: number };
+  tool_costs: { signature: number; metadata: number; financial: number }; // server may still supply "financial"
   credits: any;
 };
 
 type PlayState = "boot" | "ready" | "reveal" | "error" | "expired";
-
-// --- toggle if you want to hide the financial tool in the UI
-const SHOW_FINANCIAL = false;
 
 export default function App() {
   const [state, setState] = useState<PlayState>("boot");
@@ -36,14 +32,15 @@ export default function App() {
   const [c, setCase] = useState<CasePublic | null>(null);
   const [sid, setSid] = useState<string | null>(null);
 
-  // --- shuffle state: display index (A/B/C) -> server index (0/1/2)
+  // display order (A/B/C) -> server index (0/1/2)
   const [order, setOrder] = useState<number[]>([0, 1, 2]);
   const labels = ["A", "B", "C"];
 
-  const [pick, setPick] = useState<number | null>(null); // display index 0..2
+  const [pick, setPick] = useState<number | null>(null); // display index
   const [tLeft, setTLeft] = useState<number>(0);
   const [logs, setLogs] = useState<string[]>([]);
-  const [modal, setModal] = useState<null | { kind: "signature" | "metadata" | "financial"; payload: any }>(null);
+  const [modal, setModal] =
+    useState<null | { kind: "signature" | "metadata" | "results"; payload: any }>(null);
   const [leader, setLeader] = useState<any>(null);
   const countdownActive = state === "ready" && tLeft > 0;
 
@@ -62,13 +59,8 @@ export default function App() {
   }
 
   function reorderComparePayload(payload: { a: any; b: any; c: any }, ord: number[]) {
-    // payload is in server order [0,1,2] -> {a,b,c}; reorder to display A,B,C
-    const arr = [payload.a, payload.b, payload.c];
-    return {
-      a: arr[ord[0]],
-      b: arr[ord[1]],
-      c: arr[ord[2]],
-    };
+    const arr = [payload.a, payload.b, payload.c]; // server order
+    return { a: arr[ord[0]], b: arr[ord[1]], c: arr[ord[2]] }; // display order
   }
 
   // boot
@@ -91,8 +83,7 @@ export default function App() {
         setCase(cp);
         setSid(payload.session_id as string);
         setTLeft((cp.timer_seconds | 0) || 90);
-        // shuffle the three images for display
-        setOrder(shuffle([0, 1, 2]));
+        setOrder(shuffle([0, 1, 2])); // shuffle client-side
         setState("ready");
       } catch (e: any) {
         const msg = e?.message || String(e);
@@ -152,13 +143,11 @@ export default function App() {
       <ToolTray
         disabled={state !== "ready"}
         timer={tLeft}
-        showFinancial={SHOW_FINANCIAL}
         onSignature={async () => {
           try {
             const [sa, sb, sc] = await compareSignature(c.case_id, sid);
-            const payloadInServerOrder = { a: sa, b: sb, c: sc };
-            const payloadInDisplayOrder = reorderComparePayload(payloadInServerOrder, order);
-            setModal({ kind: "signature", payload: payloadInDisplayOrder });
+            const payload = reorderComparePayload({ a: sa, b: sb, c: sc }, order);
+            setModal({ kind: "signature", payload });
           } catch (e: any) {
             alert(`Signature compare failed: ${e?.message || e}`);
           }
@@ -166,19 +155,10 @@ export default function App() {
         onMetadata={async () => {
           try {
             const [ma, mb, mc] = await compareMetadata(c.case_id, sid);
-            const payloadInServerOrder = { a: ma, b: mb, c: mc };
-            const payloadInDisplayOrder = reorderComparePayload(payloadInServerOrder, order);
-            setModal({ kind: "metadata", payload: payloadInDisplayOrder });
+            const payload = reorderComparePayload({ a: ma, b: mb, c: mc }, order);
+            setModal({ kind: "metadata", payload });
           } catch (e: any) {
             alert(`Metadata compare failed: ${e?.message || e}`);
-          }
-        }}
-        onFinancial={async () => {
-          try {
-            const r = await callToolFinancial(c.case_id, sid);
-            setModal({ kind: "financial", payload: r });
-          } catch (e: any) {
-            alert(`Financial hint failed: ${e?.message || e}`);
           }
         }}
       />
@@ -214,10 +194,7 @@ export default function App() {
               // translate display index (A/B/C) -> server index (0/1/2)
               const serverIndex = order[pick!];
               const resp = await submitGuess(c.case_id, sid, serverIndex, rationale);
-              setModal({
-                kind: "financial",
-                payload: { flags: [`Score: ${resp.score}`, `Time left: ${resp.timeLeft}s`, `IP left: ${resp.ipLeft}`] },
-              });
+              setModal({ kind: "results", payload: resp });
               setState("reveal");
               try {
                 const lb = await getDailyLeaderboard();
@@ -245,7 +222,7 @@ export default function App() {
         <Modal onClose={() => setModal(null)}>
           {modal.kind === "signature" && <SignatureCompare crops={modal.payload} />}
           {modal.kind === "metadata" && <MetadataCompare flags={modal.payload} />}
-          {modal.kind === "financial" && <FinancialPane data={modal.payload} />}
+          {modal.kind === "results" && <ResultsPane data={modal.payload} />}
         </Modal>
       )}
 
@@ -266,24 +243,19 @@ function Header() {
 function ToolTray({
   disabled,
   timer,
-  showFinancial,
   onSignature,
   onMetadata,
-  onFinancial,
 }: {
   disabled: boolean;
   timer: number;
-  showFinancial: boolean;
   onSignature: () => void;
   onMetadata: () => void;
-  onFinancial: () => void;
 }) {
   return (
     <div className="tray">
       <div className="tray-left">
         <button disabled={disabled} onClick={onSignature}>Signature (compare)</button>
         <button disabled={disabled} onClick={onMetadata}>Metadata (compare)</button>
-        {showFinancial && <button disabled={disabled} onClick={onFinancial}>Financial (hint)</button>}
       </div>
       <div className="tray-right">
         ⏱ <strong>{timer}s</strong>
@@ -338,11 +310,25 @@ function MetadataCompare({ flags }: { flags: { a: any; b: any; c: any } }) {
   );
 }
 
-function FinancialPane({ data }: { data: { flags?: string[] } }) {
+function ResultsPane({ data }: { data: any }) {
+  const msg =
+    data?.message ||
+    (typeof data?.correct === "boolean"
+      ? data.correct
+        ? "Correct!"
+        : "Not quite — good try."
+      : "Result received.");
+  const extras = [
+    data?.score != null ? `Score: ${data.score}` : null,
+    data?.timeLeft != null ? `Time left: ${data.timeLeft}s` : null,
+    data?.ipLeft != null ? `IP left: ${data.ipLeft}` : null,
+  ].filter(Boolean);
   return (
     <div>
-      <h3>Financial Trace</h3>
-      <p>{(data.flags && data.flags[0]) || "Hint unavailable."}</p>
+      <h3>Result</h3>
+      <p>{msg}</p>
+      {extras.length > 0 && <ul>{extras.map((t: string, i: number) => <li key={i}>{t}</li>)}</ul>}
+      {!extras.length && <pre className="log">{JSON.stringify(data, null, 2)}</pre>}
     </div>
   );
 }
