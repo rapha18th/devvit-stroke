@@ -1,8 +1,15 @@
+// src/client/api.ts
 export const API_BASE = "/api/proxy";
 
+// Debug flag: only true if you opt-in via ?debug=1 or window.__HS_DEBUG__ = true
+const DEBUG =
+  /[?&]debug=1/.test(globalThis.location?.search || "") ||
+  (globalThis as any).__HS_DEBUG__ === true;
+
 function log(...args: any[]) {
-  console.log("[API]", ...args);
+  if (DEBUG) console.log("[API]", ...args);
 }
+
 function standardHeaders() {
   return { "Content-Type": "application/json" };
 }
@@ -10,19 +17,22 @@ function standardHeaders() {
 async function fetchJSON(url: string, init?: RequestInit) {
   const method = init?.method || "GET";
   log(method, url);
-  const res = await fetch(url, {
-    ...init,
-    headers: { ...(init?.headers || {}), ...standardHeaders() },
-  });
-  log("→", res.status, res.statusText);
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status} ${res.statusText} :: ${text.slice(0, 500)}`);
+  try {
+    const res = await fetch(url, { ...init, headers: { ...(init?.headers || {}), ...standardHeaders() } });
+    log("→", res.status, res.statusText);
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`HTTP ${res.status} ${res.statusText} :: ${text.slice(0, 500)}`);
+    }
+    return await res.json();
+  } catch (err: any) {
+    log("ERROR", err?.name, err?.message);
+    if (DEBUG && err?.stack) log(err.stack);
+    throw err;
   }
-  return res.json();
 }
 
-// -------- API surface --------
+// ---------------- API surface ----------------
 
 export async function health() {
   return fetchJSON(`${API_BASE}/health`);
@@ -63,8 +73,7 @@ export async function getDailyLeaderboard() {
   return fetchJSON(`${API_BASE}/leaderboard/daily`);
 }
 
-// ----- convenience: compare all three at once -----
-
+// Compare helpers (used by the tool tray)
 export async function compareSignature(caseId: string, sessionId: string) {
   const [a, b, c] = await Promise.all([
     callToolSignature(caseId, sessionId, 0),
