@@ -77,8 +77,8 @@ except Exception:
 
 # --- Models (exact names) ---
 CATEGORY_MODEL = "gemini-2.5-flash"
-GENERATION_MODEL = "gemini-2.0-flash-exp-image-generation"
-
+#GENERATION_MODEL = "gemini-2.0-flash-exp-image-generation"
+GENERATION_MODEL = "gemini-2.5-flash-image-preview
 # --- Game constants ---
 TIMER_SECONDS = 90
 INITIAL_IP = 8
