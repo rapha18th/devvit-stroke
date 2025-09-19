@@ -1,10 +1,8 @@
-// src/client/api.ts
 export const API_BASE = "/api/proxy";
 
 function log(...args: any[]) {
   console.log("[API]", ...args);
 }
-
 function standardHeaders() {
   return { "Content-Type": "application/json" };
 }
@@ -12,22 +10,19 @@ function standardHeaders() {
 async function fetchJSON(url: string, init?: RequestInit) {
   const method = init?.method || "GET";
   log(method, url);
-  try {
-    const res = await fetch(url, { ...init, headers: { ...(init?.headers || {}), ...standardHeaders() } });
-    log("→", res.status, res.statusText);
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(`HTTP ${res.status} ${res.statusText} :: ${text.slice(0, 500)}`);
-    }
-    return await res.json();
-  } catch (err: any) {
-    log("ERROR", err?.name, err?.message);
-    if (err?.stack) log(err.stack);
-    throw err;
+  const res = await fetch(url, {
+    ...init,
+    headers: { ...(init?.headers || {}), ...standardHeaders() },
+  });
+  log("→", res.status, res.statusText);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`HTTP ${res.status} ${res.statusText} :: ${text.slice(0, 500)}`);
   }
+  return res.json();
 }
 
-// ---------------- API surface ----------------
+// -------- API surface --------
 
 export async function health() {
   return fetchJSON(`${API_BASE}/health`);
@@ -56,14 +51,6 @@ export async function callToolMetadata(caseId: string, sessionId: string, imageI
   });
 }
 
-export async function callToolFinancial(caseId: string, sessionId: string) {
-  return fetchJSON(`${API_BASE}/cases/${encodeURIComponent(caseId)}/tool/financial`, {
-    method: "POST",
-    headers: { "X-Session-Id": sessionId },
-    body: JSON.stringify({}),
-  });
-}
-
 export async function submitGuess(caseId: string, sessionId: string, imageIndex: number, rationale: string) {
   return fetchJSON(`${API_BASE}/cases/${encodeURIComponent(caseId)}/guess`, {
     method: "POST",
@@ -76,7 +63,7 @@ export async function getDailyLeaderboard() {
   return fetchJSON(`${API_BASE}/leaderboard/daily`);
 }
 
-// -------- convenience helpers for “compare all” --------
+// ----- convenience: compare all three at once -----
 
 export async function compareSignature(caseId: string, sessionId: string) {
   const [a, b, c] = await Promise.all([
@@ -84,7 +71,7 @@ export async function compareSignature(caseId: string, sessionId: string) {
     callToolSignature(caseId, sessionId, 1),
     callToolSignature(caseId, sessionId, 2),
   ]);
-  return [a, b, c] as const; // {crop_url, hint, ip_remaining} x3
+  return [a, b, c] as const;
 }
 
 export async function compareMetadata(caseId: string, sessionId: string) {
@@ -93,5 +80,5 @@ export async function compareMetadata(caseId: string, sessionId: string) {
     callToolMetadata(caseId, sessionId, 1),
     callToolMetadata(caseId, sessionId, 2),
   ]);
-  return [a, b, c] as const; // {flags:[...], ip_remaining} x3
+  return [a, b, c] as const;
 }
