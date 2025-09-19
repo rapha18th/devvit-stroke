@@ -1,0 +1,7 @@
+google-genai
+Pillow
+Flask
+Flask-Cors
+firebase-admin
+pandas
+numpy
