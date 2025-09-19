@@ -1,4 +1,3 @@
-// src/client/App.tsx
 import React, { useEffect, useMemo, useState } from "react";
 import {
   API_BASE,
@@ -6,7 +5,6 @@ import {
   startToday,
   compareSignature,
   compareMetadata,
-  callToolFinancial,
   submitGuess,
   getDailyLeaderboard,
 } from "./api";
@@ -35,7 +33,7 @@ export default function App() {
   const [pick, setPick] = useState<number | null>(null);
   const [tLeft, setTLeft] = useState<number>(0);
   const [logs, setLogs] = useState<string[]>([]);
-  const [modal, setModal] = useState<null | { kind: "signature" | "metadata" | "financial"; payload: any }>(null);
+  const [modal, setModal] = useState<null | { kind: "signature" | "metadata"; payload: any }>(null);
   const [leader, setLeader] = useState<any>(null);
   const countdownActive = state === "ready" && tLeft > 0;
 
@@ -44,7 +42,7 @@ export default function App() {
     setLogs((p) => [...p, msg].slice(-400));
   }
 
-  // boot
+  // Boot
   useEffect(() => {
     (async () => {
       push("[Boot] DOMContentLoaded");
@@ -74,7 +72,7 @@ export default function App() {
     })();
   }, []);
 
-  // countdown
+  // Countdown
   useEffect(() => {
     if (!countdownActive) return;
     const id = setInterval(() => {
@@ -90,7 +88,7 @@ export default function App() {
     return () => clearInterval(id);
   }, [countdownActive]);
 
-  // ----- UI states -----
+  // ----- Renders -----
   if (state === "boot") {
     return (
       <Shell>
@@ -119,7 +117,7 @@ export default function App() {
       <Header />
       <p className="brief"><em>{c.brief}</em></p>
 
-      {/* global tool tray */}
+      {/* Global tool tray */}
       <ToolTray
         disabled={state !== "ready"}
         timer={tLeft}
@@ -139,20 +137,16 @@ export default function App() {
             alert(`Metadata compare failed: ${e?.message || e}`);
           }
         }}
-        onFinancial={async () => {
-          try {
-            const r = await callToolFinancial(c.case_id, sid);
-            setModal({ kind: "financial", payload: r });
-          } catch (e: any) {
-            alert(`Financial hint failed: ${e?.message || e}`);
-          }
-        }}
       />
 
       {/* 3-up gallery; tap to select */}
       <div className="grid">
         {c.images.map((src, i) => (
-          <figure key={i} className={`card ${pick === i ? "active" : ""}`} onClick={() => setPick(i)}>
+          <figure
+            key={i}
+            className={`card ${pick === i ? "active" : ""}`}
+            onClick={() => setPick(i)}
+          >
             <img src={src} alt={`image ${i + 1}`} />
             <figcaption>{["A", "B", "C"][i]}</figcaption>
           </figure>
@@ -171,10 +165,8 @@ export default function App() {
             try {
               const rationale = (document.getElementById("rationale") as HTMLInputElement)?.value || "";
               const resp = await submitGuess(c.case_id, sid, pick!, rationale);
-              setModal({
-                kind: "financial", // reuse pane styling; will show reveal below anyway
-                payload: { flags: [`Score: ${resp.score}`, `Time left: ${resp.timeLeft}s`, `IP left: ${resp.ipLeft}`] },
-              });
+              // Minimal reveal (score only; your mockProvider returns a full reveal)
+              alert(`Score: ${resp.score}\nTime left: ${resp.timeLeft}s\nIP left: ${resp.ipLeft}`);
               setState("reveal");
               try {
                 const lb = await getDailyLeaderboard();
@@ -189,7 +181,7 @@ export default function App() {
         </button>
       </div>
 
-      {/* reveal + leaderboard after guess */}
+      {/* leaderboard after guess */}
       {state === "reveal" && leader && (
         <div className="reveal">
           <h3>Daily Leaderboard</h3>
@@ -202,7 +194,6 @@ export default function App() {
         <Modal onClose={() => setModal(null)}>
           {modal.kind === "signature" && <SignatureCompare crops={modal.payload} />}
           {modal.kind === "metadata" && <MetadataCompare flags={modal.payload} />}
-          {modal.kind === "financial" && <FinancialPane data={modal.payload} />}
         </Modal>
       )}
 
@@ -225,20 +216,17 @@ function ToolTray({
   timer,
   onSignature,
   onMetadata,
-  onFinancial,
 }: {
   disabled: boolean;
   timer: number;
   onSignature: () => void;
   onMetadata: () => void;
-  onFinancial: () => void;
 }) {
   return (
     <div className="tray">
       <div className="tray-left">
         <button disabled={disabled} onClick={onSignature}>Signature (compare)</button>
         <button disabled={disabled} onClick={onMetadata}>Metadata (compare)</button>
-        <button disabled={disabled} onClick={onFinancial}>Financial (hint)</button>
       </div>
       <div className="tray-right">
         ⏱ <strong>{timer}s</strong>
@@ -289,15 +277,6 @@ function MetadataCompare({ flags }: { flags: { a: any; b: any; c: any } }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function FinancialPane({ data }: { data: { flags?: string[] } }) {
-  return (
-    <div>
-      <h3>Financial Trace</h3>
-      <p>{(data.flags && data.flags[0]) || "Hint unavailable."}</p>
     </div>
   );
 }
