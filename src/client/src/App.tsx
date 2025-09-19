@@ -374,7 +374,7 @@ function SmallLog({ logs }: { logs: string[] }) {
   if (!DEBUG) return null;
   return (
     <details style={{ marginTop: 16 }} open>
-      <summary>HiddenStroke Logs</summary>
+      <summary>RedStroke Logs</summary>
       <pre className="log">{logs.join("\n")}</pre>
     </details>
   );
