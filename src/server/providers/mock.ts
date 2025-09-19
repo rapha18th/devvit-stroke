@@ -1,6 +1,6 @@
 // src/server/providers/mock.ts
 import type { HiddenStrokeProvider } from "./types";
-import { MOCK_CASES, caseIdToday } from "../data/mockCases";
+import { MOCK_CASES, caseIdToday } from "../mockCases";;
 
 // In-memory sessions (simple + ephemeral)
 type Session = {
